@@ -57,7 +57,7 @@ export default function Home() {
             {data.sort((a,b)=>b.score-a.score).slice(0,25).map(z => (
               <tr key={z.zcta} style={{cursor:'pointer'}} onClick={()=>setSelected(z)}>
                 <td>
-                  <Link href={`/zip/${encodeURIComponent(z.zcta)}`}><a>{z.zip}</a></Link>
+                  <Link href={`/zip/${encodeURIComponent(z.zcta)}`}>{z.zip}</Link>
                 </td>
                 <td>{z.score.toFixed(2)}</td>
                 <td>{z.projected_2030_count}</td>
@@ -69,13 +69,15 @@ export default function Home() {
         {selected && (
           <div style={{marginTop:12}}>
             <h4>Details — {selected.zip}</h4>
-            <div>Score: {selected.score.toFixed(2)}</div>
-            <div>Current target households: {selected.current_target_households}</div>
-            <div>Projected 2030: {selected.projected_2030_count}</div>
-            <div>Median income: ${selected.median_income.toLocaleString()}</div>
-            <div style={{marginTop:8}}>
-              <Link href={`/zip/${encodeURIComponent(selected.zcta)}`}><a>Open Drilldown</a></Link>
-            </div>
+            {selected.score !== undefined && <div>Score: {selected.score.toFixed(2)}</div>}
+            {selected.current_target_households !== undefined && <div>Current target households: {selected.current_target_households}</div>}
+            {selected.projected_2030_count !== undefined && <div>Projected 2030: {selected.projected_2030_count}</div>}
+            {selected.median_income !== undefined && <div>Median income: ${selected.median_income.toLocaleString()}</div>}
+            {selected.zcta && (
+              <div style={{marginTop:8}}>
+                <Link href={`/zip/${encodeURIComponent(selected.zcta)}`}>Open Drilldown</Link>
+              </div>
+            )}
           </div>
         )}
       </div>
