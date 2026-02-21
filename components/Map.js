@@ -5,7 +5,17 @@ export default function Map({ points = [], heatmap = false, onSelect, center }) 
   const mapRef = useRef(null)
   const containerRef = useRef(null)
   const markerRef = useRef(null)
-
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''
+  if (!token) {
+    return (
+      <div className="map-area" style={{display:'flex', alignItems:'center', justifyContent:'center'}}>
+        <div style={{padding:20, maxWidth:420, textAlign:'center', border:'1px solid #eee', borderRadius:8, background:'#fff'}}>
+          <strong>Mapbox token not set</strong>
+          <div style={{marginTop:8}}>Set `NEXT_PUBLIC_MAPBOX_TOKEN` in <code>.env.local</code> and restart the dev server.</div>
+        </div>
+      </div>
+    )
+  }
   useEffect(() => {
     if (!containerRef.current) return
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''
