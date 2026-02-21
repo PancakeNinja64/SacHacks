@@ -1,5 +1,6 @@
 import useSWR from 'swr'
 import Map from '../components/Map'
+import Link from 'next/link'
 import { useState } from 'react'
 
 const fetcher = (url) => fetch(url).then(r => r.json())
@@ -12,6 +13,22 @@ export default function Home() {
   if (error) return <div>Failed to load data</div>
   if (!data) return <div>Loading...</div>
 
+  const exportCsv = () => {
+    if (!data || !data.length) return
+    const keys = Object.keys(data[0])
+    const rows = [keys.join(','), ...data.map(r => keys.map(k => JSON.stringify(r[k] ?? '')).join(','))]
+    const csv = rows.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'top_zips.csv'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="container">
       <div className="sidebar">
@@ -23,6 +40,10 @@ export default function Home() {
           </label>
         </div>
 
+        <div style={{display:'flex', gap:8, marginBottom:12}}>
+          <button onClick={exportCsv}>Export CSV</button>
+        </div>
+
         <h3>Top ZIPs</h3>
         <table>
           <thead>
@@ -31,7 +52,9 @@ export default function Home() {
           <tbody>
             {data.sort((a,b)=>b.score-a.score).slice(0,25).map(z => (
               <tr key={z.zcta} style={{cursor:'pointer'}} onClick={()=>setSelected(z)}>
-                <td>{z.zip}</td>
+                <td>
+                  <Link href={`/zip/${encodeURIComponent(z.zcta)}`}><a>{z.zip}</a></Link>
+                </td>
                 <td>{z.score.toFixed(2)}</td>
                 <td>{z.projected_2030_count}</td>
               </tr>
@@ -46,6 +69,9 @@ export default function Home() {
             <div>Current target households: {selected.current_target_households}</div>
             <div>Projected 2030: {selected.projected_2030_count}</div>
             <div>Median income: ${selected.median_income.toLocaleString()}</div>
+            <div style={{marginTop:8}}>
+              <Link href={`/zip/${encodeURIComponent(selected.zcta)}`}><a>Open Drilldown</a></Link>
+            </div>
           </div>
         )}
       </div>
