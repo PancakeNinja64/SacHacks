@@ -28,6 +28,47 @@ export default function Map({ points = [], heatmap = false, onSelect, center }) 
     mapRef.current = map
 
     map.on('load', () => {
+      // Load polygon GeoJSON
+      fetch('/sample/zcta_polygons.geojson')
+        .then(r => r.json())
+        .then(geojson => {
+          map.addSource('zcta-polygons', {
+            type: 'geojson',
+            data: geojson
+          })
+
+          // polygon fill layer colored by score
+          map.addLayer({
+            id: 'zcta-fill',
+            type: 'fill',
+            source: 'zcta-polygons',
+            paint: {
+              'fill-color': [
+                'interpolate',
+                ['linear'],
+                ['get', 'score'],
+                0, '#ffffcc',
+                0.55, '#fed976',
+                0.75, '#fd8d3c',
+                1, '#bd0026'
+              ],
+              'fill-opacity': 0.7
+            }
+          })
+
+          // polygon outline layer
+          map.addLayer({
+            id: 'zcta-outline',
+            type: 'line',
+            source: 'zcta-polygons',
+            paint: {
+              'line-color': '#ffffff',
+              'line-width': 2
+            }
+          })
+        })
+
+      // Point-based sources (for legacy circles/heatmap)
       map.addSource('zips', {
         type: 'geojson',
         data: toFeatureCollection(points)
@@ -87,9 +128,11 @@ export default function Map({ points = [], heatmap = false, onSelect, center }) 
       map.on('mouseenter', 'zips-circle', () => { map.getCanvas().style.cursor = 'pointer' })
       map.on('mouseleave', 'zips-circle', () => { map.getCanvas().style.cursor = '' })
 
-      // initial visibility
-      map.setLayoutProperty('zips-heat', 'visibility', heatmap ? 'visible' : 'none')
-      map.setLayoutProperty('zips-circle', 'visibility', heatmap ? 'none' : 'visible')
+      // initial visibility: polygons on, circles/heatmap off by default
+      map.setLayoutProperty('zcta-fill', 'visibility', 'visible')
+      map.setLayoutProperty('zcta-outline', 'visibility', 'visible')
+      map.setLayoutProperty('zips-heat', 'visibility', 'none')
+      map.setLayoutProperty('zips-circle', 'visibility', 'none')
     })
 
     return () => map.remove()
@@ -101,7 +144,11 @@ export default function Map({ points = [], heatmap = false, onSelect, center }) 
     if (!map || !map.isStyleLoaded()) return
     const src = map.getSource('zips')
     if (src) src.setData(toFeatureCollection(points))
-    if (map.getLayer('zips-heat')) map.setLayoutProperty('zips-heat', 'visibility', heatmap ? 'visible' : 'none')
+    
+    // toggle: heatmap=true → show polygons, heatmap=false → show circles
+    if (map.getLayer('zcta-fill')) map.setLayoutProperty('zcta-fill', 'visibility', heatmap ? 'visible' : 'none')
+    if (map.getLayer('zcta-outline')) map.setLayoutProperty('zcta-outline', 'visibility', heatmap ? 'visible' : 'none')
+    if (map.getLayer('zips-heat')) map.setLayoutProperty('zips-heat', 'visibility', heatmap ? 'none' : 'visible')
     if (map.getLayer('zips-circle')) map.setLayoutProperty('zips-circle', 'visibility', heatmap ? 'none' : 'visible')
   }, [points, heatmap])
 

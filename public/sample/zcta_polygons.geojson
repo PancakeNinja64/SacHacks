@@ -1,0 +1,93 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "zcta": "95814",
+        "zip": "95814",
+        "state": "CA",
+        "score": 0.92,
+        "median_income": 135000
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-121.55, 38.55],
+            [-121.44, 38.55],
+            [-121.44, 38.62],
+            [-121.55, 38.62],
+            [-121.55, 38.55]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zcta": "94103",
+        "zip": "94103",
+        "state": "CA",
+        "score": 0.79,
+        "median_income": 140000
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.42, 37.75],
+            [-122.39, 37.75],
+            [-122.39, 37.79],
+            [-122.42, 37.79],
+            [-122.42, 37.75]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zcta": "95112",
+        "zip": "95112",
+        "state": "CA",
+        "score": 0.64,
+        "median_income": 115000
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-121.92, 37.30],
+            [-121.87, 37.30],
+            [-121.87, 37.37],
+            [-121.92, 37.37],
+            [-121.92, 37.30]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zcta": "20001",
+        "zip": "20001",
+        "state": "DC",
+        "score": 0.55,
+        "median_income": 98000
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-77.05, 38.88],
+            [-77.02, 38.88],
+            [-77.02, 38.93],
+            [-77.05, 38.93],
+            [-77.05, 38.88]
+          ]
+        ]
+      }
+    }
+  ]
+}
