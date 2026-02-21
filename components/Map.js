@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
 
-export default function Map({ points = [], heatmap = false, onSelect }) {
+export default function Map({ points = [], heatmap = false, onSelect, center }) {
   const mapRef = useRef(null)
   const containerRef = useRef(null)
+  const markerRef = useRef(null)
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -93,6 +94,23 @@ export default function Map({ points = [], heatmap = false, onSelect }) {
     if (map.getLayer('zips-heat')) map.setLayoutProperty('zips-heat', 'visibility', heatmap ? 'visible' : 'none')
     if (map.getLayer('zips-circle')) map.setLayoutProperty('zips-circle', 'visibility', heatmap ? 'none' : 'visible')
   }, [points, heatmap])
+
+  // fly to external center requests (from search)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !center) return
+    const { lon, lat, zoom } = center
+    map.flyTo({ center: [lon, lat], zoom: zoom || 12 })
+
+    // add marker
+    if (markerRef.current) {
+      markerRef.current.remove()
+      markerRef.current = null
+    }
+    markerRef.current = new mapboxgl.Marker({ color: '#ff3333' })
+      .setLngLat([lon, lat])
+      .addTo(map)
+  }, [center])
 
   return <div className="map-area" style={{ position: 'relative' }}>
     <div ref={containerRef} style={{ width: '100%', height: '100%' }} />

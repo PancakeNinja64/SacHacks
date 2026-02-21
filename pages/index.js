@@ -1,5 +1,6 @@
 import useSWR from 'swr'
 import Map from '../components/Map'
+import Search from '../components/Search'
 import Link from 'next/link'
 import { useState } from 'react'
 
@@ -9,6 +10,7 @@ export default function Home() {
   const { data, error } = useSWR('/api/top-zips', fetcher)
   const [heatmap, setHeatmap] = useState(true)
   const [selected, setSelected] = useState(null)
+  const [center, setCenter] = useState(null)
 
   if (error) return <div>Failed to load data</div>
   if (!data) return <div>Loading...</div>
@@ -33,6 +35,8 @@ export default function Home() {
     <div className="container">
       <div className="sidebar">
         <h2>Strategic Housing Dashboard (Person 2)</h2>
+        <Search onSelect={(s)=>{ setCenter({ lon: s.lon, lat: s.lat, zoom:12 }); setSelected({zip: s.place_name, zcta:'', score:0}) }} />
+
         <div className="toggle">
           <label>
             <input type="checkbox" checked={heatmap} onChange={(e) => setHeatmap(e.target.checked)} />{' '}
@@ -76,7 +80,7 @@ export default function Home() {
         )}
       </div>
 
-      <Map points={data} heatmap={heatmap} onSelect={(p)=>setSelected(p)} />
+      <Map points={data} heatmap={heatmap} onSelect={(p)=>setSelected(p)} center={center} />
     </div>
   )
 }
