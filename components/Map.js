@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
+import * as turf from '@turf/turf'
 
 export default function Map({ points = [], heatmap = false, onSelect, center }) {
   const mapRef = useRef(null)
@@ -54,6 +55,18 @@ export default function Map({ points = [], heatmap = false, onSelect, center }) 
               ],
               'fill-opacity': 0.7
             }
+          })
+
+          // highlight layer for selected polygon
+          map.addLayer({
+            id: 'zcta-fill-highlight',
+            type: 'fill',
+            source: 'zcta-polygons',
+            paint: {
+              'fill-color': '#ffffff',
+              'fill-opacity': 0.3
+            },
+            filter: ['==', ['get', 'zcta'], ''] // empty filter, updated on click
           })
 
           // polygon outline layer
@@ -121,6 +134,21 @@ export default function Map({ points = [], heatmap = false, onSelect, center }) 
           .setLngLat(coordinates)
           .setHTML(`<strong>${props.zip} (${props.state})</strong><br/>Score: ${Number(props.score).toFixed(2)}<br/>Projected 2030: ${props.projected_2030_count}`)
           .addTo(map)
+        if (onSelect) onSelect(props)
+      })
+
+      // click handler for polygon layer
+      map.on('click', 'zcta-fill', (e) => {
+        const features = e.features
+        if (!features || !features.length) return
+        const f = features[0]
+        const props = f.properties
+        // fly to polygon bounds using turf.bbox
+        const bounds = turf.bbox(f)
+        map.fitBounds(bounds, { padding: 40 })
+        // set selected zcta highlight filter
+        map.setFilter('zcta-fill-highlight', ['==', ['get', 'zcta'], props.zcta])
+        // call parent callback
         if (onSelect) onSelect(props)
       })
 
