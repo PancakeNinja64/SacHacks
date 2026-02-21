@@ -19,7 +19,8 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
     )
   }
 
-  useImperativeHandle(ref, () => ({\n    searchByZip: (zipCode) => {
+  useImperativeHandle(ref, () => ({
+    searchByZip: (zipCode) => {
       const map = mapRef.current
       const data = polygonDataRef.current
       if (!map || !data) return false
