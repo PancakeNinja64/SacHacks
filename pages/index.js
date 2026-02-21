@@ -2,7 +2,7 @@ import useSWR from 'swr'
 import Map from '../components/Map'
 import Search from '../components/Search'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 const fetcher = (url) => fetch(url).then(r => r.json())
 
@@ -11,9 +11,19 @@ export default function Home() {
   const [heatmap, setHeatmap] = useState(true)
   const [selected, setSelected] = useState(null)
   const [center, setCenter] = useState(null)
+  const mapRef = useRef(null)
 
   if (error) return <div>Failed to load data</div>
   if (!data) return <div>Loading...</div>
+
+  const handleZipSearch = (zipCode) => {
+    if (mapRef.current && mapRef.current.searchByZip) {
+      const found = mapRef.current.searchByZip(zipCode)
+      if (!found) {
+        alert(`ZIP code ${zipCode} not found in our database`)
+      }
+    }
+  }
 
   const exportCsv = () => {
     if (!data || !data.length) return
@@ -35,7 +45,7 @@ export default function Home() {
     <div className="container">
       <div className="sidebar">
         <h2>Strategic Housing Dashboard (Person 2)</h2>
-        <Search onSelect={(s)=>{ setCenter({ lon: s.lon, lat: s.lat, zoom:12 }); setSelected({zip: s.place_name, zcta:'', score:0}) }} />
+        <Search onSelect={(s)=>{ setCenter({ lon: s.lon, lat: s.lat, zoom:12 }); setSelected({zip: s.place_name, zcta:'', score:0}) }} onZipSearch={handleZipSearch} />
 
         <div className="toggle">
           <label>
@@ -82,7 +92,7 @@ export default function Home() {
         )}
       </div>
 
-      <Map points={data} heatmap={heatmap} onSelect={(p)=>setSelected(p)} center={center} />
+      <Map points={data} heatmap={heatmap} onSelect={(p)=>setSelected(p)} center={center} ref={mapRef} />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function Search({ onSelect }) {
+export default function Search({ onSelect, onZipSearch }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
 
@@ -8,6 +8,16 @@ export default function Search({ onSelect }) {
 
   const search = async (q) => {
     setQuery(q)
+    
+    // Detect 5-digit ZIP code
+    if (/^\d{5}$/.test(q)) {
+      if (onZipSearch) {
+        onZipSearch(q)
+      }
+      setResults([])
+      return
+    }
+    
     if (!q || q.length < 3) {
       setResults([])
       return

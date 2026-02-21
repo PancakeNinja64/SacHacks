@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import mapboxgl from 'mapbox-gl'
 import * as turf from '@turf/turf'
 
-export default function Map({ points = [], heatmap = false, onSelect, center }) {
+const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, center }, ref) {
   const mapRef = useRef(null)
   const containerRef = useRef(null)
   const markerRef = useRef(null)
+  const polygonDataRef = useRef(null)
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''
   if (!token) {
     return (
@@ -17,6 +18,24 @@ export default function Map({ points = [], heatmap = false, onSelect, center }) 
       </div>
     )
   }
+
+  useImperativeHandle(ref, () => ({\n    searchByZip: (zipCode) => {
+      const map = mapRef.current
+      const data = polygonDataRef.current
+      if (!map || !data) return false
+
+      const feature = data.features.find(f => f.properties.zip === zipCode || f.properties.zcta === zipCode)
+      if (!feature) return false
+
+      const bounds = turf.bbox(feature)
+      map.fitBounds(bounds, { padding: 60 })
+      if (map.getLayer('zcta-fill-highlight')) {
+        map.setFilter('zcta-fill-highlight', ['==', ['get', 'zcta'], feature.properties.zcta])
+      }
+      if (onSelect) onSelect(feature.properties)
+      return true
+    }
+  }), [onSelect])
   useEffect(() => {
     if (!containerRef.current) return
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''
@@ -33,6 +52,7 @@ export default function Map({ points = [], heatmap = false, onSelect, center }) 
       fetch('/sample/zcta_polygons.geojson')
         .then(r => r.json())
         .then(geojson => {
+          polygonDataRef.current = geojson
           map.addSource('zcta-polygons', {
             type: 'geojson',
             data: geojson
@@ -200,7 +220,9 @@ export default function Map({ points = [], heatmap = false, onSelect, center }) 
   return <div className="map-area" style={{ position: 'relative' }}>
     <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
   </div>
-}
+})
+
+export default Map
 
 function toFeatureCollection(points) {
   return {
