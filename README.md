@@ -52,6 +52,8 @@ Responsible for:
 - Framing executive insights
 - Creating final presentation slides
 
+**Using your model CSV data:** Place your training/output CSV files in **`data/csv/`**. The app will stitch all `.csv` files together (by ZIP), then drive the heat map and choropleth. Required columns: `zip` (or `zcta`), `lat`, `lon`; optional: `score`, `projected_2030_count`, `current_target_households`, `growth_pct`, `median_income`, `state`. See `data/csv/README.md` for details. Use the **State** and **Min score** filters on the dashboard to change what’s displayed.
+
 ---
 
 ## 📊 Required Data (MVP Scope)

@@ -7,14 +7,25 @@ import { useState, useRef } from 'react'
 const fetcher = (url) => fetch(url).then(r => r.json())
 
 export default function Home() {
-  const { data, error } = useSWR('/api/top-zips', fetcher)
+  const { data: rawData, error } = useSWR('/api/top-zips', fetcher)
   const [heatmap, setHeatmap] = useState(false)
   const [selected, setSelected] = useState(null)
   const [center, setCenter] = useState(null)
+  const [stateFilter, setStateFilter] = useState('')
+  const [minScore, setMinScore] = useState('')
   const mapRef = useRef(null)
 
   if (error) return <div>Failed to load data</div>
-  if (!data) return <div>Loading...</div>
+  if (!rawData) return <div>Loading...</div>
+
+  // Apply filters so you can change what’s shown on the heat map
+  const data = (Array.isArray(rawData) ? rawData : []).filter((row) => {
+    if (stateFilter && (row.state || '').toUpperCase() !== stateFilter.toUpperCase()) return false
+    const score = Number(row.score)
+    if (minScore !== '' && !Number.isNaN(Number(minScore)) && score < Number(minScore)) return false
+    return true
+  })
+  const states = [...new Set((Array.isArray(rawData) ? rawData : []).map((r) => (r.state || '').trim()).filter(Boolean))].sort()
 
   const focusZip = (zipCode) => {
     if (mapRef.current && mapRef.current.searchByZip) {
@@ -95,6 +106,35 @@ export default function Home() {
           </button>
         </div>
 
+        <div className="filters-row">
+          <label className="filter-label">
+            State
+            <select
+              className="filter-select"
+              value={stateFilter}
+              onChange={(e) => setStateFilter(e.target.value)}
+            >
+              <option value="">All</option>
+              {states.map((st) => (
+                <option key={st} value={st}>{st}</option>
+              ))}
+            </select>
+          </label>
+          <label className="filter-label">
+            Min score
+            <input
+              type="number"
+              className="filter-input"
+              placeholder="0"
+              min={0}
+              max={1}
+              step={0.01}
+              value={minScore}
+              onChange={(e) => setMinScore(e.target.value)}
+            />
+          </label>
+        </div>
+
         <div className="hint-text">
           Select any ZIP, then zoom in to reveal zoning hexes clipped to that boundary.
         </div>
@@ -140,7 +180,7 @@ export default function Home() {
                     <td>
                       <Link href={`/zip/${encodeURIComponent(z.zcta)}`}>{z.zip}</Link>
                     </td>
-                    <td>{z.score.toFixed(2)}</td>
+                    <td>{(z.score != null ? Number(z.score).toFixed(2) : '—')}</td>
                     <td>{Number(z.projected_2030_count || 0).toLocaleString()}</td>
                   </tr>
                 ))}

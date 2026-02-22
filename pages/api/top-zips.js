@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { loadAndStitchCsv } from '../../lib/csv-stitch'
 
 async function fetchRemote(url) {
   try {
@@ -15,7 +16,14 @@ export default async function handler(req, res) {
   const dataSource = process.env.DATA_SOURCE_URL
   let data = null
 
-  if (dataSource) {
+  // 1) Prefer stitched CSV from data/csv (Person 2 model output)
+  const csvData = loadAndStitchCsv()
+  if (csvData && csvData.length > 0) {
+    data = csvData
+  }
+
+  // 2) Else remote URL if set
+  if (!data && dataSource) {
     try {
       data = await fetchRemote(dataSource)
     } catch (err) {
@@ -24,6 +32,7 @@ export default async function handler(req, res) {
     }
   }
 
+  // 3) Fallback to sample JSON
   if (!data) {
     try {
       const p = path.join(process.cwd(), 'public', 'sample', 'top_zips.json')

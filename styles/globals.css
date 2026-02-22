@@ -189,6 +189,37 @@ a {
   box-shadow: 0 4px 10px rgba(15, 44, 99, 0.12);
 }
 
+.filters-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.filter-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.filter-select,
+.filter-input {
+  border: 1px solid var(--line);
+  background: #f9fbff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  min-width: 70px;
+}
+
+.filter-input {
+  width: 72px;
+}
+
 .hint-text {
   color: var(--muted);
   font-size: 0.79rem;
