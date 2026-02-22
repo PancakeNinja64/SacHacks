@@ -34,24 +34,24 @@ export default function Search({ onSelect, onZipSearch }) {
   }
 
   return (
-    <div style={{marginBottom:12}}>
+    <div className="search-block">
       <input
-        placeholder="Search address, city, ZIP..."
+        placeholder="Search address, city, ZIP code..."
         value={query}
         onChange={(e) => search(e.target.value)}
-        style={{width:'100%', padding:8, boxSizing:'border-box'}}
+        className="search-input"
       />
       {results.length > 0 && (
-        <div style={{background:'#fff', border:'1px solid #eee', maxHeight:200, overflow:'auto'}}>
+        <div className="search-results">
           {results.map(r => (
-            <div key={r.id} style={{padding:8, cursor:'pointer'}} onClick={() => {
+            <button key={r.id} className="search-result-item" type="button" onClick={() => {
               const [lon, lat] = r.center
               setResults([])
               setQuery(r.place_name)
               if (onSelect) onSelect({ lon, lat, place_name: r.place_name })
             }}>
               {r.place_name}
-            </div>
+            </button>
           ))}
         </div>
       )}
