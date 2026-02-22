@@ -15,6 +15,7 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
   const pointDataRef = useRef(toFeatureCollection(points))
   const polygonsReadyRef = useRef(false)
   const selectedZipFeatureRef = useRef(null)
+  const externalBoundaryRef = useRef(null)
   const heatmapRef = useRef(heatmap)
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''
   if (!token) {
@@ -31,8 +32,40 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
   const refreshVisibility = (map) => {
     applyLayerVisibility(map, heatmapRef.current, {
       hasSelectedZip: Boolean(selectedZipFeatureRef.current),
+      hasExternalBoundary: Boolean(externalBoundaryRef.current),
       zoom: map.getZoom()
     })
+  }
+
+  const setExternalBoundary = (map, feature) => {
+    externalBoundaryRef.current = feature || null
+    const externalSource = map.getSource('zcta-external-boundary')
+    if (!externalSource) return
+    externalSource.setData(feature ? turf.featureCollection([feature]) : EMPTY_FEATURE_COLLECTION)
+  }
+
+  const fetchExternalBoundary = async (zipCode) => {
+    try {
+      const response = await fetch(`/api/zcta-boundary?zcta=${encodeURIComponent(zipCode)}`)
+      if (!response.ok) return null
+      const geojson = await response.json()
+      const feature = geojson?.features?.[0]
+      if (!feature) return null
+
+      const normalizedZip = normalizeZip(
+        feature?.properties?.zcta || feature?.properties?.zip || zipCode
+      )
+      return {
+        ...feature,
+        properties: {
+          ...feature.properties,
+          zcta: normalizedZip,
+          zip: normalizedZip
+        }
+      }
+    } catch (err) {
+      return null
+    }
   }
 
   const refreshSelectedZipZones = (map) => {
@@ -54,7 +87,9 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
     refreshVisibility(map)
   }
 
-  const applySelection = (map, feature) => {
+  const applySelection = (map, feature, options = {}) => {
+    const { isExternal = false } = options
+    setExternalBoundary(map, isExternal ? feature : null)
     selectedZipFeatureRef.current = feature || null
     const selectedZcta = normalizeZip(feature?.properties?.zcta || feature?.properties?.zip)
     const emptyFilter = ['==', ['get', 'zcta'], '']
@@ -74,23 +109,37 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
 
   useImperativeHandle(ref, () => ({
     isBoundaryReady: () => polygonsReadyRef.current,
-    searchByZip: (zipCode) => {
+    searchByZip: async (zipCode) => {
       const map = mapRef.current
-      const data = polygonDataRef.current
-      if (!map || !data || !polygonsReadyRef.current) return null
+      if (!map) return null
 
       const normalizedZip = normalizeZip(zipCode)
-      const feature = data.features.find((f) => {
-        const featureZip = normalizeZip(f.properties?.zip)
-        const featureZcta = normalizeZip(f.properties?.zcta)
-        return featureZip === normalizedZip || featureZcta === normalizedZip
-      })
-      if (!feature) return false
+      const localData = polygonDataRef.current
+      if (localData?.features?.length) {
+        const localFeature = localData.features.find((f) => {
+          const featureZip = normalizeZip(f.properties?.zip)
+          const featureZcta = normalizeZip(f.properties?.zcta)
+          return featureZip === normalizedZip || featureZcta === normalizedZip
+        })
 
-      const bounds = turf.bbox(feature)
+        if (localFeature) {
+          const bounds = turf.bbox(localFeature)
+          map.fitBounds(bounds, { padding: 60 })
+          applySelection(map, localFeature, { isExternal: false })
+          if (onSelect) onSelect(localFeature.properties)
+          return true
+        }
+      }
+
+      const externalFeature = await fetchExternalBoundary(normalizedZip)
+      if (!externalFeature) {
+        return polygonsReadyRef.current ? false : null
+      }
+
+      const bounds = turf.bbox(externalFeature)
       map.fitBounds(bounds, { padding: 60 })
-      applySelection(map, feature)
-      if (onSelect) onSelect(feature.properties)
+      applySelection(map, externalFeature, { isExternal: true })
+      if (onSelect) onSelect(externalFeature.properties)
       return true
     }
   }), [onSelect])
@@ -170,6 +219,11 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
         })
 
         map.addSource('zcta-zones', {
+          type: 'geojson',
+          data: EMPTY_FEATURE_COLLECTION
+        })
+
+        map.addSource('zcta-external-boundary', {
           type: 'geojson',
           data: EMPTY_FEATURE_COLLECTION
         })
@@ -261,6 +315,31 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
             'line-opacity': 0.55
           }
         })
+
+        map.addLayer({
+          id: 'zcta-external-fill',
+          type: 'fill',
+          source: 'zcta-external-boundary',
+          paint: {
+            'fill-color': '#b274d2',
+            'fill-opacity': 0.18
+          }
+        })
+
+        map.addLayer({
+          id: 'zcta-external-outline',
+          type: 'line',
+          source: 'zcta-external-boundary',
+          paint: {
+            'line-color': '#7b2c83',
+            'line-width': 3,
+            'line-opacity': 0.95
+          }
+        })
+
+        if (externalBoundaryRef.current) {
+          setExternalBoundary(map, externalBoundaryRef.current)
+        }
 
         map.on('click', 'zcta-fill', (e) => {
           const features = e.features
@@ -403,17 +482,20 @@ function setLayerVisibility(map, layerId, visibility) {
 }
 
 function applyLayerVisibility(map, heatmap, viewState = {}) {
-  const { hasSelectedZip = false, zoom = 0 } = viewState
+  const { hasSelectedZip = false, hasExternalBoundary = false, zoom = 0 } = viewState
   const showHeatmap = heatmap
   const showChoropleth = !heatmap
   const showZoneChoropleth = showChoropleth && hasSelectedZip && zoom >= ZONE_ZOOM_THRESHOLD
   const showZipChoropleth = showChoropleth && !showZoneChoropleth
+  const showExternalBoundary = showChoropleth && hasExternalBoundary
 
   setLayerVisibility(map, 'zips-heat', showHeatmap ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-fill', showZipChoropleth ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-fill-highlight', showZipChoropleth ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-zones-fill', showZoneChoropleth ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-zones-outline', showZoneChoropleth ? 'visible' : 'none')
+  setLayerVisibility(map, 'zcta-external-fill', showExternalBoundary ? 'visible' : 'none')
+  setLayerVisibility(map, 'zcta-external-outline', showExternalBoundary ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-outline', (showHeatmap || showChoropleth) ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-outline-highlight', (showChoropleth && hasSelectedZip) ? 'visible' : 'none')
 }

@@ -1,29 +1,58 @@
 import { useState } from 'react'
 
+const ZIP_REGEX = /^\d{5}(?:-\d{4})?$/
+
 export default function Search({ onSelect, onZipSearch }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
 
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''
 
+  const geocodeZip = async (zip) => {
+    if (!token) return false
+    try {
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(zip)}.json?types=postcode&country=us&limit=1&access_token=${token}`
+      const res = await fetch(url)
+      const data = await res.json()
+      const feature = data?.features?.[0]
+      if (!feature || !Array.isArray(feature.center)) return false
+
+      const [lon, lat] = feature.center
+      setQuery(feature.place_name || zip)
+      if (onSelect) onSelect({ lon, lat, place_name: feature.place_name || zip })
+      return true
+    } catch (err) {
+      console.error('zip geocode error', err)
+      return false
+    }
+  }
+
   const search = async (q) => {
     setQuery(q)
-    
-    // Detect 5-digit ZIP code
-    if (/^\d{5}$/.test(q)) {
+
+    const trimmed = q.trim()
+
+    // Detect ZIP and search local boundaries first, then geocode fallback
+    if (ZIP_REGEX.test(trimmed)) {
+      const zip = trimmed.slice(0, 5)
+      let foundInDataset = false
       if (onZipSearch) {
-        onZipSearch(q)
+        foundInDataset = Boolean(await onZipSearch(zip))
+      }
+
+      if (!foundInDataset) {
+        await geocodeZip(zip)
       }
       setResults([])
       return
     }
-    
-    if (!q || q.length < 3) {
+
+    if (!trimmed || trimmed.length < 3) {
       setResults([])
       return
     }
     try {
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?autocomplete=true&types=address,place,locality,neighborhood&limit=6&access_token=${token}`
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(trimmed)}.json?autocomplete=true&types=address,place,locality,neighborhood&limit=6&access_token=${token}`
       const res = await fetch(url)
       const j = await res.json()
       setResults(j.features || [])
