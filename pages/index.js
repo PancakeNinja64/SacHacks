@@ -9,6 +9,8 @@ const fetcher = (url) => fetch(url).then(r => r.json())
 export default function Home() {
   const { data: rawData, error } = useSWR('/api/top-zips', fetcher)
   const [heatmap, setHeatmap] = useState(false)
+  const [mapMode, setMapMode] = useState('standard')
+  const [styleMenuOpen, setStyleMenuOpen] = useState(false)
   const [selected, setSelected] = useState(null)
   const [center, setCenter] = useState(null)
   const [stateFilter, setStateFilter] = useState('')
@@ -92,7 +94,10 @@ export default function Home() {
       <aside className="side-panel">
         <div className="panel-top">
           <div className="brand-block">
-            <div className="brand-badge">ZIP</div>
+            <div className="brand-badge">
+              <img src="/s3-1.svg" alt="ZIP logo" className="brand-logo" />
+              <span className="brand-wordmark">ZIP</span>
+            </div>
           </div>
         </div>
 
@@ -268,7 +273,73 @@ export default function Home() {
       </aside>
 
       <section className="map-panel">
-        <Map points={data} heatmap={heatmap} onSelect={(p) => setSelected(p)} center={center} ref={mapRef} />
+        <Map
+          points={data}
+          heatmap={heatmap}
+          mapMode={mapMode}
+          onSelect={(p) => setSelected(p)}
+          center={center}
+          ref={mapRef}
+        />
+        <div className="map-style-control">
+          <button
+            type="button"
+            className="map-style-square"
+            onClick={() => setStyleMenuOpen((open) => !open)}
+            aria-haspopup="menu"
+            aria-expanded={styleMenuOpen}
+            aria-label="Open map style menu"
+          >
+            <span className="map-style-icon" aria-hidden="true">
+              <span className="map-style-icon-layer back" />
+              <span className="map-style-icon-layer mid" />
+              <span className="map-style-icon-layer front" />
+            </span>
+          </button>
+          {styleMenuOpen && (
+            <div className="map-style-menu" role="menu" aria-label="Map style">
+              <button
+                type="button"
+                className={`map-style-option ${mapMode === 'standard' ? 'active' : ''}`}
+                role="menuitemradio"
+                aria-checked={mapMode === 'standard'}
+                onClick={() => {
+                  setMapMode('standard')
+                  setStyleMenuOpen(false)
+                }}
+              >
+                <span className="map-style-swatch standard" />
+                Standard
+              </button>
+              <button
+                type="button"
+                className={`map-style-option ${mapMode === 'satellite' ? 'active' : ''}`}
+                role="menuitemradio"
+                aria-checked={mapMode === 'satellite'}
+                onClick={() => {
+                  setMapMode('satellite')
+                  setStyleMenuOpen(false)
+                }}
+              >
+                <span className="map-style-swatch satellite" />
+                Satellite
+              </button>
+              <button
+                type="button"
+                className={`map-style-option ${mapMode === '3d' ? 'active' : ''}`}
+                role="menuitemradio"
+                aria-checked={mapMode === '3d'}
+                onClick={() => {
+                  setMapMode('3d')
+                  setStyleMenuOpen(false)
+                }}
+              >
+                <span className="map-style-swatch three-d" />
+                3D
+              </button>
+            </div>
+          )}
+        </div>
         {modalRecord && (
           <div className="drilldown-overlay" role="dialog" aria-modal="true" aria-label={`ZIP ${modalRecord.zip} drilldown`}>
             <button

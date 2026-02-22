@@ -25,11 +25,15 @@ const TOOLTIP_STYLE = {
   fontSize: 12
 }
 
+const RADIAN = Math.PI / 180
+
 const recommendationText = {
-  Invest: 'High growth potential with strong income demographics. Recommended for investment.',
+  Invest: 'High growth potential with strong income demographics.',
   Watch: 'Moderate growth potential. Monitor trends before committing.',
   Avoid: 'Limited growth prospects at this time. Consider other opportunities.'
 }
+
+const ACTION_OPTIONS = ['Invest', 'Watch', 'Avoid']
 
 export default function ZipDrilldown({ record, modal = false, onClose }) {
   if (!record) return null
@@ -53,7 +57,7 @@ export default function ZipDrilldown({ record, modal = false, onClose }) {
   // Score breakdown (placeholder values—Person 1 to replace with real percentages)
   const scoreBreakdown = [
     { name: 'Growth', value: 40, fill: CHART_COLORS[0] },
-    { name: 'Current Size', value: 30, fill: CHART_COLORS[1] },
+    { name: 'Current Size', value: 30, fill: '#d2b48c' },
     { name: 'Income', value: 20, fill: CHART_COLORS[2] },
     { name: 'Population', value: 10, fill: CHART_COLORS[3] }
   ]
@@ -81,10 +85,9 @@ export default function ZipDrilldown({ record, modal = false, onClose }) {
       </header>
 
       <section className="zip-metrics-grid">
-        <article className="zip-metric-card">
+        <article className={`zip-metric-card zip-score-card ${category.tone}`}>
           <div className="zip-metric-label">Investment Score</div>
           <div className="zip-metric-value">{score.toFixed(2)}</div>
-          <div className={`zip-category-chip ${category.tone}`}>{category.label}</div>
         </article>
         <article className="zip-metric-card">
           <div className="zip-metric-label">Median Income</div>
@@ -100,10 +103,32 @@ export default function ZipDrilldown({ record, modal = false, onClose }) {
         </article>
       </section>
 
+      <section className="zip-decision-card" aria-label="Recommended investment action">
+        <div className="zip-decision-header">
+          <h3 className="zip-panel-title">Decision Signal</h3>
+        </div>
+        <div className="zip-decision-options" role="list">
+          {ACTION_OPTIONS.map((option) => {
+            const optionTone = option.toLowerCase()
+            const active = option === category.label
+            return (
+              <div
+                key={option}
+                role="listitem"
+                className={`zip-decision-option ${optionTone} ${active ? 'active' : ''}`}
+              >
+                <span className="zip-decision-name">{option}</span>
+                {active && <span className="zip-decision-check">Recommended</span>}
+              </div>
+            )
+          })}
+        </div>
+        <p className="zip-decision-text">{recommendationText[category.label]}</p>
+      </section>
+
       <section className="zip-panels-grid">
         <article className="zip-panel-card">
           <h3 className="zip-panel-title">Target Household Projection (Sample Data)</h3>
-          <p className="zip-panel-note">Person 1: replace with historical + projected data.</p>
           <ResponsiveContainer width="100%" height={250}>
             <LineChart data={householdProjection} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <XAxis dataKey="year" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: 'rgba(17, 14, 8, 0.2)' }} />
@@ -117,7 +142,6 @@ export default function ZipDrilldown({ record, modal = false, onClose }) {
 
         <article className="zip-panel-card">
           <h3 className="zip-panel-title">Score Breakdown (Weights)</h3>
-          <p className="zip-panel-note">Person 1: replace with actual score component values.</p>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
@@ -125,8 +149,9 @@ export default function ZipDrilldown({ record, modal = false, onClose }) {
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, value }) => `${name} ${value}%`}
-                outerRadius={82}
+                label={renderPercentLabel}
+                outerRadius="72%"
+                innerRadius="38%"
                 dataKey="value"
               >
                 {scoreBreakdown.map((entry, index) => (
@@ -134,6 +159,10 @@ export default function ZipDrilldown({ record, modal = false, onClose }) {
                 ))}
               </Pie>
               <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(val) => `${val}%`} />
+              <Legend
+                wrapperStyle={{ fontSize: 12, color: '#625b52' }}
+                formatter={(value) => value}
+              />
             </PieChart>
           </ResponsiveContainer>
         </article>
@@ -158,12 +187,6 @@ export default function ZipDrilldown({ record, modal = false, onClose }) {
         </ResponsiveContainer>
       </section>
 
-      <section className={`zip-reco-card ${category.tone}`}>
-        <h3 className="zip-reco-title">Investment Recommendation: {category.label}</h3>
-        <p className="zip-reco-text">{recommendationText[category.label]}</p>
-        <p className="zip-reco-note">Person 1: add custom recommendation logic based on additional analysis.</p>
-      </section>
-
       <section className="zip-panel-card zip-wide-card">
         <h3 className="zip-panel-title">Additional Metrics</h3>
         <div className="zip-additional-grid">
@@ -185,4 +208,33 @@ function getCategory(score) {
   if (score >= 0.75) return { label: 'Invest', tone: 'invest' }
   if (score >= 0.55) return { label: 'Watch', tone: 'watch' }
   return { label: 'Avoid', tone: 'avoid' }
+}
+
+function renderPercentLabel({
+  cx,
+  cy,
+  midAngle,
+  innerRadius,
+  outerRadius,
+  percent
+}) {
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5
+  const x = cx + radius * Math.cos(-midAngle * RADIAN)
+  const y = cy + radius * Math.sin(-midAngle * RADIAN)
+  const value = `${Math.round(percent * 100)}%`
+  const fontSize = outerRadius < 45 ? 10 : 12
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="#ffffff"
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={fontSize}
+      fontWeight={600}
+    >
+      {value}
+    </text>
+  )
 }

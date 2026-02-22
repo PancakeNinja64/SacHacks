@@ -5,11 +5,19 @@ import * as turf from '@turf/turf'
 const EMPTY_FEATURE_COLLECTION = turf.featureCollection([])
 const ZONE_ZOOM_THRESHOLD = 11.5
 const ZONE_DROP_FRACTION = 0.18
+const BUILDINGS_LAYER_ID = 'zip-3d-buildings'
 
-const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, center }, ref) {
+const Map = forwardRef(function Map({ points = [], heatmap = false, mapMode = 'standard', onSelect, center }, ref) {
   const mapRef = useRef(null)
   const containerRef = useRef(null)
   const markerRef = useRef(null)
+  const cameraRef = useRef({
+    center: [-98.5795, 39.8283],
+    zoom: 3.2,
+    bearing: 0,
+    pitch: 0,
+    hasValue: false
+  })
   const polygonDataRef = useRef(null)
   const rawPolygonDataRef = useRef(null)
   const pointDataRef = useRef(toFeatureCollection(points))
@@ -172,15 +180,40 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
   useEffect(() => {
     if (!containerRef.current) return
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''
+    const isThreeD = mapMode === '3d'
+    const previousCamera = cameraRef.current
+    const hasPreviousCamera = Boolean(previousCamera?.hasValue)
+    const initialCenter = hasPreviousCamera ? previousCamera.center : [-98.5795, 39.8283]
+    const initialZoom = hasPreviousCamera ? previousCamera.zoom : (isThreeD ? 4 : 3.2)
+    const initialPitch = hasPreviousCamera
+      ? (isThreeD ? Math.max(previousCamera.pitch || 0, 58) : 0)
+      : (isThreeD ? 58 : 0)
+    const initialBearing = hasPreviousCamera
+      ? (isThreeD ? (previousCamera.pitch > 0 ? previousCamera.bearing : -22) : 0)
+      : (isThreeD ? -22 : 0)
+    const styleUrl = mapMode === 'standard'
+      ? 'mapbox://styles/mapbox/light-v11'
+      : 'mapbox://styles/mapbox/satellite-streets-v12'
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/light-v11',
-      center: [-98.5795, 39.8283],
-      zoom: 3.2
+      style: styleUrl,
+      center: initialCenter,
+      zoom: initialZoom,
+      pitch: initialPitch,
+      bearing: initialBearing,
+      antialias: true
     })
     mapRef.current = map
 
+    map.on('style.load', () => {
+      if (mapMode !== '3d') return
+      add3DBuildings(map)
+    })
+
     map.on('load', () => {
+      if (mapMode === '3d' && !hasPreviousCamera) {
+        map.easeTo({ pitch: 58, bearing: -22, duration: 500 })
+      }
       const pointCollection = toFeatureCollection(points)
       pointDataRef.current = pointCollection
 
@@ -359,6 +392,12 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
         setExternalBoundary(map, externalBoundaryRef.current)
       }
 
+      if (selectedZipFeatureRef.current) {
+        applySelection(map, selectedZipFeatureRef.current, {
+          isExternal: Boolean(externalBoundaryRef.current)
+        })
+      }
+
       map.on('click', 'zcta-fill', (e) => {
         const features = e.features
         if (!features || !features.length) return
@@ -391,11 +430,33 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
       refreshVisibility(map)
     })
 
+    map.on('moveend', () => {
+      if (!isUsableMapInstance(map)) return
+      const currentCenter = map.getCenter()
+      cameraRef.current = {
+        center: [currentCenter.lng, currentCenter.lat],
+        zoom: map.getZoom(),
+        bearing: map.getBearing(),
+        pitch: map.getPitch(),
+        hasValue: true
+      }
+    })
+
     return () => {
+      if (isUsableMapInstance(map)) {
+        const currentCenter = map.getCenter()
+        cameraRef.current = {
+          center: [currentCenter.lng, currentCenter.lat],
+          zoom: map.getZoom(),
+          bearing: map.getBearing(),
+          pitch: map.getPitch(),
+          hasValue: true
+        }
+      }
       map.remove()
       mapRef.current = null
     }
-  }, [])
+  }, [mapMode])
 
   // update source & toggle
   useEffect(() => {
@@ -524,6 +585,31 @@ function applyLayerVisibility(map, heatmap, viewState = {}) {
   setLayerVisibility(map, 'zcta-external-outline', showExternalBoundaryOutline ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-outline', (showHeatmap || showChoropleth) ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-outline-highlight', (showChoropleth && hasSelectedZip) ? 'visible' : 'none')
+}
+
+function add3DBuildings(map) {
+  if (!isUsableMapInstance(map)) return
+  if (map.getLayer(BUILDINGS_LAYER_ID)) return
+
+  const layers = map.getStyle()?.layers || []
+  const labelLayerId = layers.find(
+    (layer) => layer.type === 'symbol' && layer.layout && layer.layout['text-field']
+  )?.id
+
+  map.addLayer({
+    id: BUILDINGS_LAYER_ID,
+    source: 'composite',
+    'source-layer': 'building',
+    filter: ['==', ['get', 'extrude'], 'true'],
+    type: 'fill-extrusion',
+    minzoom: 13,
+    paint: {
+      'fill-extrusion-color': '#c2b59b',
+      'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 13, 0, 15.05, ['get', 'height']],
+      'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 13, 0, 15.05, ['get', 'min_height']],
+      'fill-extrusion-opacity': 0.72
+    }
+  }, labelLayerId)
 }
 
 function buildChoroplethZones(selectedZipFeature, pointCollection) {
