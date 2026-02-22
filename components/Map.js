@@ -114,6 +114,7 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
       if (!map) return null
 
       const normalizedZip = normalizeZip(zipCode)
+
       const localData = polygonDataRef.current
       if (localData?.features?.length) {
         const localFeature = localData.features.find((f) => {
@@ -132,15 +133,33 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
       }
 
       const externalFeature = await fetchExternalBoundary(normalizedZip)
-      if (!externalFeature) {
-        return polygonsReadyRef.current ? false : null
+      if (externalFeature) {
+        const bounds = turf.bbox(externalFeature)
+        map.fitBounds(bounds, { padding: 60 })
+        applySelection(map, externalFeature, { isExternal: true })
+        if (onSelect) onSelect(externalFeature.properties)
+        return true
       }
 
-      const bounds = turf.bbox(externalFeature)
-      map.fitBounds(bounds, { padding: 60 })
-      applySelection(map, externalFeature, { isExternal: true })
-      if (onSelect) onSelect(externalFeature.properties)
-      return true
+      // Fallback: ZIP in our point data (e.g. from CSV) but no boundary — fly to point and show details
+      const pointData = pointDataRef.current
+      if (pointData?.features?.length) {
+        const pointFeature = pointData.features.find((f) => {
+          const z = normalizeZip(f.properties?.zcta ?? f.properties?.zip)
+          return z === normalizedZip
+        })
+        if (pointFeature) {
+          const [lon, lat] = pointFeature.geometry?.coordinates ?? []
+          if (Number.isFinite(lon) && Number.isFinite(lat)) {
+            map.flyTo({ center: [lon, lat], zoom: 10 })
+            applySelection(map, null)
+            if (onSelect) onSelect(pointFeature.properties)
+            return true
+          }
+        }
+      }
+
+      return polygonsReadyRef.current ? false : null
     }
   }), [onSelect])
 
