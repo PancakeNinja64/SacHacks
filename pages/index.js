@@ -27,15 +27,20 @@ export default function Home() {
   })
   const states = [...new Set((Array.isArray(rawData) ? rawData : []).map((r) => (r.state || '').trim()).filter(Boolean))].sort()
 
-  const focusZip = (zipCode) => {
+  const focusZip = async (zipCode, options = {}) => {
+    const { silent = false } = options
     if (mapRef.current && mapRef.current.searchByZip) {
-      const found = mapRef.current.searchByZip(zipCode)
+      const found = await mapRef.current.searchByZip(zipCode)
       if (found === null) {
-        alert('ZIP boundaries are still loading. Try again in a moment.')
+        if (!silent) {
+          alert('ZIP boundaries are still loading. Try again in a moment.')
+        }
         return false
       }
       if (!found) {
-        alert(`ZIP code ${zipCode} not found in our database`)
+        if (!silent) {
+          alert(`ZIP code ${zipCode} not found in our dataset`)
+        }
         return false
       }
       return true
@@ -43,8 +48,8 @@ export default function Home() {
     return false
   }
 
-  const handleZipSearch = (zipCode) => {
-    focusZip(zipCode)
+  const handleZipSearch = async (zipCode) => {
+    return await focusZip(zipCode, { silent: true })
   }
 
   const exportCsv = () => {
@@ -173,7 +178,7 @@ export default function Home() {
                   <tr
                     key={z.zcta}
                     onClick={() => {
-                      focusZip(z.zcta)
+                      void focusZip(z.zcta)
                       setSelected(z)
                     }}
                   >
