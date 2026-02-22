@@ -2,7 +2,7 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import mapboxgl from 'mapbox-gl'
 import * as turf from '@turf/turf'
 
-const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, center }, ref) {
+const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, center, visualization = 'polygon' }, ref) {
   const mapRef = useRef(null)
   const containerRef = useRef(null)
   const markerRef = useRef(null)
@@ -108,26 +108,25 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
         data: toFeatureCollection(points)
       })
 
-      // heatmap layer
+      // circle buffer layer (for circle visualization)
       map.addLayer({
-        id: 'zips-heat',
-        type: 'heatmap',
+        id: 'zips-circle-buffer',
+        type: 'circle',
         source: 'zips',
-        maxzoom: 9,
         paint: {
-          'heatmap-weight': ['interpolate', ['linear'], ['get', 'score'], 0, 0, 1, 1],
-          'heatmap-intensity': 1,
-          'heatmap-color': [
+          'circle-radius': 12,
+          'circle-color': [
             'interpolate',
             ['linear'],
-            ['heatmap-density'],
-            0, 'rgba(33,102,172,0)',
-            0.2, 'rgb(103,169,207)',
-            0.4, 'rgb(209,229,240)',
-            0.6, 'rgb(253,219,199)',
-            0.8, 'rgb(239,138,98)',
-            1, 'rgb(178,24,43)'
-          ]
+            ['get', 'score'],
+            0, '#ffffcc',
+            0.55, '#fed976',
+            0.75, '#fd8d3c',
+            1, '#bd0026'
+          ],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+          'circle-opacity': 0.8
         }
       })
 
@@ -146,6 +145,20 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
 
       // popup on click
       map.on('click', 'zips-circle', (e) => {
+        const features = e.features
+        if (!features || !features.length) return
+        const f = features[0]
+        const props = f.properties
+        const coordinates = f.geometry.coordinates.slice()
+        new mapboxgl.Popup()
+          .setLngLat(coordinates)
+          .setHTML(`<strong>${props.zip} (${props.state})</strong><br/>Score: ${Number(props.score).toFixed(2)}<br/>Projected 2030: ${props.projected_2030_count}`)
+          .addTo(map)
+        if (onSelect) onSelect(props)
+      })
+
+      // click handler for circle buffer layer
+      map.on('click', 'zips-circle-buffer', (e) => {
         const features = e.features
         if (!features || !features.length) return
         const f = features[0]
@@ -180,6 +193,7 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
       // initial visibility: polygons on, circles/heatmap off by default
       map.setLayoutProperty('zcta-fill', 'visibility', 'visible')
       map.setLayoutProperty('zcta-outline', 'visibility', 'visible')
+      map.setLayoutProperty('zips-circle-buffer', 'visibility', 'none')
       map.setLayoutProperty('zips-heat', 'visibility', 'none')
       map.setLayoutProperty('zips-circle', 'visibility', 'none')
     })
@@ -194,12 +208,23 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
     const src = map.getSource('zips')
     if (src) src.setData(toFeatureCollection(points))
     
-    // toggle: heatmap=true → show polygons, heatmap=false → show circles
-    if (map.getLayer('zcta-fill')) map.setLayoutProperty('zcta-fill', 'visibility', heatmap ? 'visible' : 'none')
-    if (map.getLayer('zcta-outline')) map.setLayoutProperty('zcta-outline', 'visibility', heatmap ? 'visible' : 'none')
-    if (map.getLayer('zips-heat')) map.setLayoutProperty('zips-heat', 'visibility', heatmap ? 'none' : 'visible')
-    if (map.getLayer('zips-circle')) map.setLayoutProperty('zips-circle', 'visibility', heatmap ? 'none' : 'visible')
-  }, [points, heatmap])
+    // visualization toggle: 'polygon' or 'circle'
+    if (visualization === 'circle') {
+      // Show circle buffers, hide polygons
+      if (map.getLayer('zcta-fill')) map.setLayoutProperty('zcta-fill', 'visibility', 'none')
+      if (map.getLayer('zcta-outline')) map.setLayoutProperty('zcta-outline', 'visibility', 'none')
+      if (map.getLayer('zips-circle-buffer')) map.setLayoutProperty('zips-circle-buffer', 'visibility', 'visible')
+      if (map.getLayer('zips-heat')) map.setLayoutProperty('zips-heat', 'visibility', 'none')
+      if (map.getLayer('zips-circle')) map.setLayoutProperty('zips-circle', 'visibility', 'none')
+    } else {
+      // Show polygons, hide circle buffers
+      if (map.getLayer('zcta-fill')) map.setLayoutProperty('zcta-fill', 'visibility', heatmap ? 'visible' : 'none')
+      if (map.getLayer('zcta-outline')) map.setLayoutProperty('zcta-outline', 'visibility', heatmap ? 'visible' : 'none')
+      if (map.getLayer('zips-circle-buffer')) map.setLayoutProperty('zips-circle-buffer', 'visibility', 'none')
+      if (map.getLayer('zips-heat')) map.setLayoutProperty('zips-heat', 'visibility', heatmap ? 'none' : 'visible')
+      if (map.getLayer('zips-circle')) map.setLayoutProperty('zips-circle', 'visibility', heatmap ? 'none' : 'visible')
+    }
+  }, [points, heatmap, visualization])
 
   // fly to external center requests (from search)
   useEffect(() => {

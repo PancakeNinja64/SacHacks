@@ -9,6 +9,7 @@ const fetcher = (url) => fetch(url).then(r => r.json())
 export default function Home() {
   const { data, error } = useSWR('/api/top-zips', fetcher)
   const [heatmap, setHeatmap] = useState(true)
+  const [visualization, setVisualization] = useState('polygon') // 'polygon' or 'circle'
   const [selected, setSelected] = useState(null)
   const [center, setCenter] = useState(null)
   const mapRef = useRef(null)
@@ -54,6 +55,29 @@ export default function Home() {
           </label>
         </div>
 
+        <div className="toggle">
+          <label>
+            <input 
+              type="radio" 
+              name="viz" 
+              value="polygon" 
+              checked={visualization === 'polygon'} 
+              onChange={(e) => setVisualization(e.target.value)} 
+            />{' '}
+            Polygon
+          </label>
+          <label style={{marginLeft: 12}}>
+            <input 
+              type="radio" 
+              name="viz" 
+              value="circle" 
+              checked={visualization === 'circle'} 
+              onChange={(e) => setVisualization(e.target.value)} 
+            />{' '}
+            Circle Buffer
+          </label>
+        </div>
+
         <div style={{display:'flex', gap:8, marginBottom:12}}>
           <button onClick={exportCsv}>Export CSV</button>
         </div>
@@ -92,7 +116,7 @@ export default function Home() {
         )}
       </div>
 
-      <Map points={data} heatmap={heatmap} onSelect={(p)=>setSelected(p)} center={center} ref={mapRef} />
+      <Map points={data} heatmap={heatmap} onSelect={(p)=>setSelected(p)} center={center} ref={mapRef} visualization={visualization} />
     </div>
   )
 }
