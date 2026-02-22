@@ -114,7 +114,13 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
         type: 'circle',
         source: 'zips',
         paint: {
-          'circle-radius': 12,
+          'circle-radius': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            3, ['*', ['get', 'buffer-radius'], 0.5],
+            12, ['*', ['get', 'buffer-radius'], 2.5]
+          ],
           'circle-color': [
             'interpolate',
             ['linear'],
