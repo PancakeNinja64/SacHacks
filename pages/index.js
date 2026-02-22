@@ -1,8 +1,8 @@
 import useSWR from 'swr'
 import Map from '../components/Map'
 import Search from '../components/Search'
-import Link from 'next/link'
-import { useState, useRef } from 'react'
+import ZipDrilldown from '../components/ZipDrilldown'
+import { useState, useRef, useEffect } from 'react'
 
 const fetcher = (url) => fetch(url).then(r => r.json())
 
@@ -13,10 +13,11 @@ export default function Home() {
   const [center, setCenter] = useState(null)
   const [stateFilter, setStateFilter] = useState('')
   const [minScore, setMinScore] = useState('')
+  const [modalZip, setModalZip] = useState('')
   const mapRef = useRef(null)
 
-  if (error) return <div>Failed to load data</div>
-  if (!rawData) return <div>Loading...</div>
+  if (error) return <div className="status-screen">Unable to load ZIP data source.</div>
+  if (!rawData) return <div className="status-screen">Loading ZIP intelligence...</div>
 
   // Apply filters so you can change what’s shown on the heat map
   const data = (Array.isArray(rawData) ? rawData : []).filter((row) => {
@@ -25,7 +26,14 @@ export default function Home() {
     if (minScore !== '' && !Number.isNaN(Number(minScore)) && score < Number(minScore)) return false
     return true
   })
-  const states = [...new Set((Array.isArray(rawData) ? rawData : []).map((r) => (r.state || '').trim()).filter(Boolean))].sort()
+  const allRows = Array.isArray(rawData) ? rawData : []
+  const states = [...new Set(allRows.map((r) => (r.state || '').trim()).filter(Boolean))].sort()
+
+  const findRecordByZip = (zipCode) => {
+    const normalizedZip = normalizeZip(zipCode)
+    if (!normalizedZip) return null
+    return allRows.find((row) => normalizeZip(row.zcta || row.zip) === normalizedZip) || null
+  }
 
   const focusZip = async (zipCode, options = {}) => {
     const { silent = false } = options
@@ -52,38 +60,40 @@ export default function Home() {
     return await focusZip(zipCode, { silent: true })
   }
 
-  const exportCsv = () => {
-    if (!data || !data.length) return
-    const keys = Object.keys(data[0])
-    const rows = [keys.join(','), ...data.map(r => keys.map(k => JSON.stringify(r[k] ?? '')).join(','))]
-    const csv = rows.join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'top_zips.csv'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
+  const openDrilldown = (zipCode) => {
+    const normalizedZip = normalizeZip(zipCode)
+    if (!normalizedZip) return
+    setModalZip(normalizedZip)
   }
+
+  useEffect(() => {
+    if (!modalZip) return
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setModalZip('')
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [modalZip])
 
   const topZips = [...data].sort((a, b) => b.score - a.score).slice(0, 25)
   const averageScore = data.reduce((sum, zip) => sum + Number(zip.score || 0), 0) / Math.max(1, data.length)
   const projectedTotal = data.reduce((sum, zip) => sum + Number(zip.projected_2030_count || 0), 0)
+  const selectedZip = normalizeZip(selected?.zcta || selected?.zip)
+  const selectedDrilldownRecord = selectedZip ? findRecordByZip(selectedZip) : null
+  const modalRecord = modalZip ? findRecordByZip(modalZip) : null
 
   return (
     <div className="dashboard-shell">
       <aside className="side-panel">
         <div className="panel-top">
           <div className="brand-block">
-            <div className="brand-badge">HS</div>
-            <div>
-              <h1 className="panel-title">HomeScope Intelligence</h1>
-              <p className="panel-subtitle">ZIP-level demand scouting for strategic housing investments.</p>
-            </div>
+            <div className="brand-badge">ZIP</div>
           </div>
-          <button className="export-btn" onClick={exportCsv}>Export CSV</button>
         </div>
 
         <Search
@@ -160,9 +170,20 @@ export default function Home() {
         </div>
 
         <section className="table-card">
-          <div className="section-head">
+          <div className="section-head table-head">
             <h3>Top ZIP Opportunities</h3>
-            <span>{topZips.length} markets</span>
+            <div className="table-head-actions">
+              {selectedDrilldownRecord && (
+                <button
+                  type="button"
+                  className="table-drilldown-btn"
+                  onClick={() => openDrilldown(selectedDrilldownRecord.zcta || selectedDrilldownRecord.zip)}
+                >
+                  Drilldown {selectedDrilldownRecord.zip}
+                </button>
+              )}
+              <span>{topZips.length} markets</span>
+            </div>
           </div>
           <div className="table-wrap">
             <table className="zip-table">
@@ -171,6 +192,7 @@ export default function Home() {
                   <th>ZIP</th>
                   <th>Score</th>
                   <th>Projected 2030</th>
+                  <th className="zip-action-head">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -181,12 +203,29 @@ export default function Home() {
                       void focusZip(z.zcta)
                       setSelected(z)
                     }}
+                    onDoubleClick={() => {
+                      const record = findRecordByZip(z.zcta)
+                      if (!record) return
+                      openDrilldown(record.zcta || record.zip)
+                    }}
                   >
-                    <td>
-                      <Link href={`/zip/${encodeURIComponent(z.zcta)}`}>{z.zip}</Link>
-                    </td>
+                    <td className="zip-cell-label">{z.zip}</td>
                     <td>{(z.score != null ? Number(z.score).toFixed(2) : '—')}</td>
                     <td>{Number(z.projected_2030_count || 0).toLocaleString()}</td>
+                    <td className="zip-action-cell">
+                      <button
+                        type="button"
+                        className="zip-action-btn"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void focusZip(z.zcta)
+                          setSelected(z)
+                          openDrilldown(z.zcta)
+                        }}
+                      >
+                        Drilldown
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -218,10 +257,11 @@ export default function Home() {
                 <strong>${Number(selected.median_income || 0).toLocaleString()}</strong>
               </div>
             )}
-            {selected.zcta && (
-              <div className="detail-link">
-                <Link href={`/zip/${encodeURIComponent(selected.zcta)}`}>Open Drilldown</Link>
-              </div>
+            {selectedZip && !selectedDrilldownRecord && (
+              <div className="detail-note">No drilldown metrics found for ZIP {selectedZip}.</div>
+            )}
+            {selectedDrilldownRecord && (
+              <div className="detail-note">Use the `Drilldown` action in Top ZIP Opportunities for full metrics.</div>
             )}
           </section>
         )}
@@ -229,7 +269,27 @@ export default function Home() {
 
       <section className="map-panel">
         <Map points={data} heatmap={heatmap} onSelect={(p) => setSelected(p)} center={center} ref={mapRef} />
+        {modalRecord && (
+          <div className="drilldown-overlay" role="dialog" aria-modal="true" aria-label={`ZIP ${modalRecord.zip} drilldown`}>
+            <button
+              type="button"
+              className="drilldown-backdrop"
+              aria-label="Close drilldown"
+              onClick={() => setModalZip('')}
+            />
+            <div className="drilldown-modal">
+              <ZipDrilldown record={modalRecord} modal onClose={() => setModalZip('')} />
+            </div>
+          </div>
+        )}
       </section>
     </div>
   )
+}
+
+function normalizeZip(value) {
+  if (value === null || value === undefined) return ''
+  const normalized = String(value).trim()
+  if (/^\d+$/.test(normalized)) return normalized.padStart(5, '0')
+  return normalized
 }

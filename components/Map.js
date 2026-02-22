@@ -20,16 +20,17 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''
   if (!token) {
     return (
-      <div className="map-area" style={{display:'flex', alignItems:'center', justifyContent:'center'}}>
-        <div style={{padding:20, maxWidth:420, textAlign:'center', border:'1px solid #eee', borderRadius:8, background:'#fff'}}>
-          <strong>Mapbox token not set</strong>
-          <div style={{marginTop:8}}>Set `NEXT_PUBLIC_MAPBOX_TOKEN` in <code>.env.local</code> and restart the dev server.</div>
+      <div className="map-area map-token-empty">
+        <div className="map-token-card">
+          <strong className="map-token-title">Mapbox token not set</strong>
+          <div className="map-token-text">Set `NEXT_PUBLIC_MAPBOX_TOKEN` in <code>.env.local</code> and restart the dev server.</div>
         </div>
       </div>
     )
   }
 
   const refreshVisibility = (map) => {
+    if (!isUsableMapInstance(map)) return
     applyLayerVisibility(map, heatmapRef.current, {
       hasSelectedZip: Boolean(selectedZipFeatureRef.current),
       hasExternalBoundary: Boolean(externalBoundaryRef.current),
@@ -39,6 +40,7 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
 
   const setExternalBoundary = (map, feature) => {
     externalBoundaryRef.current = feature || null
+    if (!isUsableMapInstance(map)) return
     const externalSource = map.getSource('zcta-external-boundary')
     if (!externalSource) return
     externalSource.setData(feature ? turf.featureCollection([feature]) : EMPTY_FEATURE_COLLECTION)
@@ -69,6 +71,7 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
   }
 
   const refreshSelectedZipZones = (map) => {
+    if (!isUsableMapInstance(map)) return
     const selectedFeature = selectedZipFeatureRef.current
     const zoneSource = map.getSource('zcta-zones')
     if (!zoneSource) {
@@ -88,6 +91,7 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
   }
 
   const applySelection = (map, feature, options = {}) => {
+    if (!isUsableMapInstance(map)) return
     const { isExternal = false } = options
     setExternalBoundary(map, isExternal ? feature : null)
     selectedZipFeatureRef.current = feature || null
@@ -110,8 +114,8 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
   useImperativeHandle(ref, () => ({
     isBoundaryReady: () => polygonsReadyRef.current,
     searchByZip: async (zipCode) => {
-      const map = mapRef.current
-      if (!map) return null
+      const activeMap = mapRef.current
+      if (!isUsableMapInstance(activeMap)) return null
 
       const normalizedZip = normalizeZip(zipCode)
 
@@ -125,18 +129,20 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
 
         if (localFeature) {
           const bounds = turf.bbox(localFeature)
-          map.fitBounds(bounds, { padding: 60 })
-          applySelection(map, localFeature, { isExternal: false })
+          activeMap.fitBounds(bounds, { padding: 60 })
+          applySelection(activeMap, localFeature, { isExternal: false })
           if (onSelect) onSelect(localFeature.properties)
           return true
         }
       }
 
       const externalFeature = await fetchExternalBoundary(normalizedZip)
+      const latestMap = mapRef.current
+      if (!isUsableMapInstance(latestMap)) return null
       if (externalFeature) {
         const bounds = turf.bbox(externalFeature)
-        map.fitBounds(bounds, { padding: 60 })
-        applySelection(map, externalFeature, { isExternal: true })
+        latestMap.fitBounds(bounds, { padding: 60 })
+        applySelection(latestMap, externalFeature, { isExternal: true })
         if (onSelect) onSelect(externalFeature.properties)
         return true
       }
@@ -151,8 +157,8 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
         if (pointFeature) {
           const [lon, lat] = pointFeature.geometry?.coordinates ?? []
           if (Number.isFinite(lon) && Number.isFinite(lat)) {
-            map.flyTo({ center: [lon, lat], zoom: 10 })
-            applySelection(map, null)
+            latestMap.flyTo({ center: [lon, lat], zoom: 10 })
+            applySelection(latestMap, null)
             if (onSelect) onSelect(pointFeature.properties)
             return true
           }
@@ -174,9 +180,7 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
     })
     mapRef.current = map
 
-    let isCancelled = false
-
-    map.on('load', async () => {
+    map.on('load', () => {
       const pointCollection = toFeatureCollection(points)
       pointDataRef.current = pointCollection
 
@@ -206,12 +210,12 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
             'interpolate',
             ['linear'],
             ['heatmap-density'],
-            0, 'rgba(255,255,178,0)',
-            0.2, '#fff7bc',
-            0.4, '#fee391',
-            0.6, '#fe9929',
-            0.8, '#ec7014',
-            1, '#cc4c02'
+            0, 'rgba(204,255,0,0)',
+            0.2, '#f4ffbf',
+            0.4, '#e2ff73',
+            0.6, '#ccff00',
+            0.8, '#66b55a',
+            1, '#005f32'
           ]
         }
       })
@@ -222,189 +226,181 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
 
       refreshVisibility(map)
 
-      try {
-        const response = await fetch('/sample/zcta_polygons.geojson')
-        const geojson = await response.json()
-        if (isCancelled) return
+      rawPolygonDataRef.current = EMPTY_FEATURE_COLLECTION
+      polygonDataRef.current = EMPTY_FEATURE_COLLECTION
+      polygonsReadyRef.current = true
 
-        rawPolygonDataRef.current = geojson
-        const mergedGeojson = mergePolygonMetrics(geojson, points)
-        polygonDataRef.current = mergedGeojson
-        polygonsReadyRef.current = true
+      map.addSource('zcta-polygons', {
+        type: 'geojson',
+        data: EMPTY_FEATURE_COLLECTION
+      })
 
-        map.addSource('zcta-polygons', {
-          type: 'geojson',
-          data: mergedGeojson
-        })
+      map.addSource('zcta-zones', {
+        type: 'geojson',
+        data: EMPTY_FEATURE_COLLECTION
+      })
 
-        map.addSource('zcta-zones', {
-          type: 'geojson',
-          data: EMPTY_FEATURE_COLLECTION
-        })
+      map.addSource('zcta-external-boundary', {
+        type: 'geojson',
+        data: EMPTY_FEATURE_COLLECTION
+      })
 
-        map.addSource('zcta-external-boundary', {
-          type: 'geojson',
-          data: EMPTY_FEATURE_COLLECTION
-        })
-
-        // polygon fill layer colored by score
-        map.addLayer({
-          id: 'zcta-fill',
-          type: 'fill',
-          source: 'zcta-polygons',
-          paint: {
-            'fill-color': [
-              'interpolate',
-              ['linear'],
-              ['coalesce', ['get', 'projected_2030_count'], ['get', 'current_target_households'], 0],
-              0, '#ead6f3',
-              150, '#d8b8ea',
-              300, '#c998df',
-              500, '#b274d2',
-              800, '#9f56c2'
-            ],
-            'fill-opacity': 0.22
-          }
-        })
-
-        // highlight layer for selected polygon
-        map.addLayer({
-          id: 'zcta-fill-highlight',
-          type: 'fill',
-          source: 'zcta-polygons',
-          paint: {
-            'fill-color': '#ffffff',
-            'fill-opacity': 0.3
-          },
-          filter: ['==', ['get', 'zcta'], ''] // empty filter, updated on click
-        })
-
-        // polygon outline layer
-        map.addLayer({
-          id: 'zcta-outline',
-          type: 'line',
-          source: 'zcta-polygons',
-          paint: {
-            'line-color': '#7b2c83',
-            'line-width': 2.2,
-            'line-opacity': 0.85
-          }
-        })
-
-        // highlight line for selected polygon
-        map.addLayer({
-          id: 'zcta-outline-highlight',
-          type: 'line',
-          source: 'zcta-polygons',
-          paint: {
-            'line-color': '#7b2c83',
-            'line-width': 4,
-            'line-opacity': 0.95
-          },
-          filter: ['==', ['get', 'zcta'], '']
-        })
-
-        // sub-zone fill, only shown when zoomed in on selected ZIP
-        map.addLayer({
-          id: 'zcta-zones-fill',
-          type: 'fill',
-          source: 'zcta-zones',
-          paint: {
-            'fill-color': [
-              'interpolate',
-              ['linear'],
-              ['coalesce', ['get', 'zone_intensity'], 0],
-              0, '#72e66a',
-              0.45, '#b4ec67',
-              0.65, '#ece45f',
-              0.82, '#f5a563',
-              1, '#e1464c'
-            ],
-            'fill-opacity': 0.74
-          }
-        })
-
-        map.addLayer({
-          id: 'zcta-zones-outline',
-          type: 'line',
-          source: 'zcta-zones',
-          paint: {
-            'line-color': '#4ebf55',
-            'line-width': 1,
-            'line-opacity': 0.55
-          }
-        })
-
-        map.addLayer({
-          id: 'zcta-external-fill',
-          type: 'fill',
-          source: 'zcta-external-boundary',
-          paint: {
-            'fill-color': '#b274d2',
-            'fill-opacity': 0.18
-          }
-        })
-
-        map.addLayer({
-          id: 'zcta-external-outline',
-          type: 'line',
-          source: 'zcta-external-boundary',
-          paint: {
-            'line-color': '#7b2c83',
-            'line-width': 3,
-            'line-opacity': 0.95
-          }
-        })
-
-        if (externalBoundaryRef.current) {
-          setExternalBoundary(map, externalBoundaryRef.current)
+      // polygon fill layer colored by score
+      map.addLayer({
+        id: 'zcta-fill',
+        type: 'fill',
+        source: 'zcta-polygons',
+        paint: {
+          'fill-color': [
+            'interpolate',
+            ['linear'],
+            ['coalesce', ['get', 'projected_2030_count'], ['get', 'current_target_households'], 0],
+            0, '#f7f6f2',
+            150, '#ebe8de',
+            300, '#dcd5c5',
+            500, '#c8bda2',
+            800, '#a58f68'
+          ],
+          'fill-opacity': 0.22
         }
+      })
 
-        map.on('click', 'zcta-fill', (e) => {
-          const features = e.features
-          if (!features || !features.length) return
-          const f = features[0]
-          const props = f.properties
-          const bounds = turf.bbox(f)
-          map.fitBounds(bounds, { padding: 40 })
-          applySelection(map, f)
-          if (onSelect) onSelect(props)
-        })
+      // highlight layer for selected polygon
+      map.addLayer({
+        id: 'zcta-fill-highlight',
+        type: 'fill',
+        source: 'zcta-polygons',
+        paint: {
+          'fill-color': '#ffffff',
+          'fill-opacity': 0.3
+        },
+        filter: ['==', ['get', 'zcta'], ''] // empty filter, updated on click
+      })
 
-        map.on('mouseenter', 'zcta-fill', () => { map.getCanvas().style.cursor = 'pointer' })
-        map.on('mouseleave', 'zcta-fill', () => { map.getCanvas().style.cursor = '' })
-        map.on('mouseenter', 'zcta-zones-fill', () => { map.getCanvas().style.cursor = 'pointer' })
-        map.on('mouseleave', 'zcta-zones-fill', () => { map.getCanvas().style.cursor = '' })
+      // polygon outline layer
+      map.addLayer({
+        id: 'zcta-outline',
+        type: 'line',
+        source: 'zcta-polygons',
+        paint: {
+          'line-color': '#35322d',
+          'line-width': 2.2,
+          'line-opacity': 0.85
+        }
+      })
 
-        map.on('click', 'zcta-zones-fill', (e) => {
-          const features = e.features
-          if (!features || !features.length) return
-          const f = features[0]
-          const props = f.properties || {}
-          const centerPoint = turf.centroid(f).geometry.coordinates
-          new mapboxgl.Popup()
-            .setLngLat(centerPoint)
-            .setHTML(`<strong>Zone</strong><br/>Count: ${Number(props.zone_count || 0).toFixed(0)}`)
-            .addTo(map)
-        })
+      // highlight line for selected polygon
+      map.addLayer({
+        id: 'zcta-outline-highlight',
+        type: 'line',
+        source: 'zcta-polygons',
+        paint: {
+          'line-color': '#110e08',
+          'line-width': 4,
+          'line-opacity': 0.95
+        },
+        filter: ['==', ['get', 'zcta'], '']
+      })
 
-        refreshSelectedZipZones(map)
-        refreshVisibility(map)
-      } catch (err) {
-        console.error('Failed to load boundary polygons', err)
+      // sub-zone fill, only shown when zoomed in on selected ZIP
+      map.addLayer({
+        id: 'zcta-zones-fill',
+        type: 'fill',
+        source: 'zcta-zones',
+        paint: {
+          // Low intensity -> red (no-invest), high intensity -> green (invest).
+          'fill-color': [
+            'interpolate',
+            ['linear'],
+            ['coalesce', ['get', 'zone_intensity'], 0],
+            0, '#9b1c1c',
+            0.45, '#d95337',
+            0.65, '#e6c951',
+            0.82, '#9ed64b',
+            1, '#00a542'
+          ],
+          'fill-opacity': 0.74
+        }
+      })
+
+      map.addLayer({
+        id: 'zcta-zones-outline',
+        type: 'line',
+        source: 'zcta-zones',
+        paint: {
+          'line-color': '#005f32',
+          'line-width': 1,
+          'line-opacity': 0.55
+        }
+      })
+
+      map.addLayer({
+        id: 'zcta-external-fill',
+        type: 'fill',
+        source: 'zcta-external-boundary',
+        paint: {
+          'fill-color': '#ccff00',
+          'fill-opacity': 0.14
+        }
+      })
+
+      map.addLayer({
+        id: 'zcta-external-outline',
+        type: 'line',
+        source: 'zcta-external-boundary',
+        paint: {
+          'line-color': '#110e08',
+          'line-width': 3,
+          'line-opacity': 0.95
+        }
+      })
+
+      if (externalBoundaryRef.current) {
+        setExternalBoundary(map, externalBoundaryRef.current)
       }
+
+      map.on('click', 'zcta-fill', (e) => {
+        const features = e.features
+        if (!features || !features.length) return
+        const f = features[0]
+        const props = f.properties
+        const bounds = turf.bbox(f)
+        map.fitBounds(bounds, { padding: 40 })
+        applySelection(map, f)
+        if (onSelect) onSelect(props)
+      })
+
+      map.on('mouseenter', 'zcta-fill', () => { map.getCanvas().style.cursor = 'pointer' })
+      map.on('mouseleave', 'zcta-fill', () => { map.getCanvas().style.cursor = '' })
+      map.on('mouseenter', 'zcta-zones-fill', () => { map.getCanvas().style.cursor = 'pointer' })
+      map.on('mouseleave', 'zcta-zones-fill', () => { map.getCanvas().style.cursor = '' })
+
+      map.on('click', 'zcta-zones-fill', (e) => {
+        const features = e.features
+        if (!features || !features.length) return
+        const f = features[0]
+        const props = f.properties || {}
+        const centerPoint = turf.centroid(f).geometry.coordinates
+        new mapboxgl.Popup()
+          .setLngLat(centerPoint)
+          .setHTML(`<strong>Zone</strong><br/>Count: ${Number(props.zone_count || 0).toFixed(0)}`)
+          .addTo(map)
+      })
+
+      refreshSelectedZipZones(map)
+      refreshVisibility(map)
     })
 
     return () => {
-      isCancelled = true
       map.remove()
+      mapRef.current = null
     }
   }, [])
 
   // update source & toggle
   useEffect(() => {
     const map = mapRef.current
-    if (!map) return
+    if (!isUsableMapInstance(map)) return
 
     const pointCollection = toFeatureCollection(points)
     pointDataRef.current = pointCollection
@@ -439,7 +435,7 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
   // fly to external center requests (from search)
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !center) return
+    if (!isUsableMapInstance(map) || !center) return
     const { lon, lat, zoom } = center
     map.flyTo({ center: [lon, lat], zoom: zoom || 12 })
 
@@ -448,13 +444,13 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, onSelect, ce
       markerRef.current.remove()
       markerRef.current = null
     }
-    markerRef.current = new mapboxgl.Marker({ color: '#ff3333' })
+    markerRef.current = new mapboxgl.Marker({ color: '#005f32' })
       .setLngLat([lon, lat])
       .addTo(map)
   }, [center])
 
-  return <div className="map-area" style={{ position: 'relative' }}>
-    <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+  return <div className="map-area map-area-frame">
+    <div ref={containerRef} className="map-canvas" />
   </div>
 })
 
@@ -465,6 +461,15 @@ function normalizeZip(value) {
   const normalized = String(value).trim()
   if (/^\d+$/.test(normalized)) return normalized.padStart(5, '0')
   return normalized
+}
+
+function isUsableMapInstance(map) {
+  return Boolean(
+    map &&
+    typeof map.getSource === 'function' &&
+    typeof map.getLayer === 'function' &&
+    typeof map.fitBounds === 'function'
+  )
 }
 
 function mergePolygonMetrics(geojson, points) {
@@ -506,15 +511,17 @@ function applyLayerVisibility(map, heatmap, viewState = {}) {
   const showChoropleth = !heatmap
   const showZoneChoropleth = showChoropleth && hasSelectedZip && zoom >= ZONE_ZOOM_THRESHOLD
   const showZipChoropleth = showChoropleth && !showZoneChoropleth
-  const showExternalBoundary = showChoropleth && hasExternalBoundary
+  // Keep typed ZIP boundary visible in both modes; only fill is choropleth-specific.
+  const showExternalBoundaryFill = showChoropleth && hasExternalBoundary
+  const showExternalBoundaryOutline = hasExternalBoundary
 
   setLayerVisibility(map, 'zips-heat', showHeatmap ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-fill', showZipChoropleth ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-fill-highlight', showZipChoropleth ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-zones-fill', showZoneChoropleth ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-zones-outline', showZoneChoropleth ? 'visible' : 'none')
-  setLayerVisibility(map, 'zcta-external-fill', showExternalBoundary ? 'visible' : 'none')
-  setLayerVisibility(map, 'zcta-external-outline', showExternalBoundary ? 'visible' : 'none')
+  setLayerVisibility(map, 'zcta-external-fill', showExternalBoundaryFill ? 'visible' : 'none')
+  setLayerVisibility(map, 'zcta-external-outline', showExternalBoundaryOutline ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-outline', (showHeatmap || showChoropleth) ? 'visible' : 'none')
   setLayerVisibility(map, 'zcta-outline-highlight', (showChoropleth && hasSelectedZip) ? 'visible' : 'none')
 }

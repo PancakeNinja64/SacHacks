@@ -1,4 +1,4 @@
-# 🏠 Strategic Housing Development Dashboard  
+# ZIP  
 UC Davis MSBA – Strategic Housing Development Challenge
 
 ---

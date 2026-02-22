@@ -1,5 +1,3 @@
-import fs from 'fs'
-import path from 'path'
 import { loadAndStitchCsv } from '../../lib/csv-stitch'
 
 async function fetchRemote(url) {
@@ -27,24 +25,20 @@ export default async function handler(req, res) {
     try {
       data = await fetchRemote(dataSource)
     } catch (err) {
-      console.warn('Failed to fetch DATA_SOURCE_URL, falling back to sample:', err.message)
+      console.warn('Failed to fetch DATA_SOURCE_URL:', err.message)
       data = null
     }
   }
 
-  // 3) Fallback to sample JSON
+  // 3) No placeholder fallback. Return an explicit error when no real data source is available.
   if (!data) {
-    try {
-      const p = path.join(process.cwd(), 'public', 'sample', 'top_zips.json')
-      const raw = fs.readFileSync(p, 'utf8')
-      data = JSON.parse(raw)
-    } catch (err) {
-      res.status(500).json({ error: 'failed to read sample data', details: err.message })
-      return
-    }
+    res.status(500).json({
+      error: 'No ZIP data source available',
+      details: 'Add CSV files under data/csv or set DATA_SOURCE_URL.'
+    })
+    return
   }
 
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120')
   res.status(200).json(data)
 }
-
