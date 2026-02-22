@@ -16,6 +16,20 @@ export default function Home() {
   const [modalZip, setModalZip] = useState('')
   const mapRef = useRef(null)
 
+  useEffect(() => {
+    if (!modalZip) return
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setModalZip('')
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [modalZip])
+
   if (error) return <div className="status-screen">Unable to load ZIP data source.</div>
   if (!rawData) return <div className="status-screen">Loading ZIP intelligence...</div>
 
@@ -65,20 +79,6 @@ export default function Home() {
     if (!normalizedZip) return
     setModalZip(normalizedZip)
   }
-
-  useEffect(() => {
-    if (!modalZip) return
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setModalZip('')
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [modalZip])
 
   const topZips = [...data].sort((a, b) => b.score - a.score).slice(0, 25)
   const averageScore = data.reduce((sum, zip) => sum + Number(zip.score || 0), 0) / Math.max(1, data.length)
