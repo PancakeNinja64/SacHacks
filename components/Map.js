@@ -243,12 +243,12 @@ const Map = forwardRef(function Map({ points = [], heatmap = false, mapMode = 's
             'interpolate',
             ['linear'],
             ['heatmap-density'],
-            0, 'rgba(204,255,0,0)',
-            0.2, '#f4ffbf',
-            0.4, '#e2ff73',
-            0.6, '#ccff00',
-            0.8, '#66b55a',
-            1, '#005f32'
+            0, 'rgba(0,0,255,0)',
+            0.2, '#2c7bb6',
+            0.4, '#00a6ca',
+            0.6, '#f9d057',
+            0.8, '#f98e52',
+            1, '#d7191c'
           ]
         }
       })

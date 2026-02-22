@@ -246,8 +246,8 @@ a {
 }
 
 .mode-btn.active {
-  border-color: var(--primary);
-  background: var(--primary);
+  border-color: #2e7d32;
+  background: #2e7d32;
   color: #ffffff;
 }
 
