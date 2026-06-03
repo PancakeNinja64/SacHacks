@@ -97,3 +97,13 @@ Common optional columns:
 - `state`
 
 See `data/csv/README.md` for CSV structure details.
+
+## Screenshots
+
+| Choropleth Map View | Heatmap View |
+|---|---|
+| ![Choropleth map showing ZIP-level investment scores with hex overlays](screenshot-choropleth.png) | ![National heatmap showing high-opportunity ZIP clusters across the US](screenshot-heatmap.png) |
+
+**Drilldown Modal — ZIP Code Detail Analytics**
+
+![Drilldown modal for ZIP 95134 showing investment score, household projections, and score breakdown](screenshot-drilldown.png)
